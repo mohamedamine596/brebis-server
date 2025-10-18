@@ -10,6 +10,7 @@ const {
 } = require('../controllers/brebisController');
 const { protect, admin } = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
+const { uploadSingle, handleMulterError } = require('../middlewares/upload');
 
 const router = express.Router();
 
@@ -50,8 +51,8 @@ router.get('/:id', getBrebisById);
 
 // Routes protégées admin
 router.get('/admin/stats', protect, admin, getBrebisStats);
-router.post('/', protect, admin, brebisValidation, validate, createBrebis);
-router.put('/:id', protect, admin, brebisValidation, validate, updateBrebis);
+router.post('/', protect, admin, uploadSingle, handleMulterError, createBrebis);
+router.put('/:id', protect, admin, uploadSingle, handleMulterError, updateBrebis);
 router.delete('/:id', protect, admin, deleteBrebis);
 
 module.exports = router;

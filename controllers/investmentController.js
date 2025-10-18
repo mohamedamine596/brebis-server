@@ -2,6 +2,75 @@ const Investment = require('../models/Investment');
 const User = require('../models/User');
 const Brebis = require('../models/Brebis');
 
+// @desc    Créer un nouvel investissement
+// @route   POST /api/investments
+// @access  Private
+exports.createInvestment = async (req, res, next) => {
+  try {
+    const { brebisId } = req.body;
+
+    if (!brebisId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de la brebis requis'
+      });
+    }
+
+    // Vérifier que la brebis existe et est disponible
+    const brebis = await Brebis.findById(brebisId);
+    if (!brebis) {
+      return res.status(404).json({
+        success: false,
+        message: 'Brebis non trouvée'
+      });
+    }
+
+    if (!brebis.disponible) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cette brebis n\'est plus disponible'
+      });
+    }
+
+    // Vérifier si l'utilisateur a déjà investi dans cette brebis
+    const existingInvestment = await Investment.findOne({
+      user: req.user.id,
+      brebis: brebisId
+    });
+
+    if (existingInvestment) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vous avez déjà investi dans cette brebis'
+      });
+    }
+
+    // Créer l'investissement
+    const investment = await Investment.create({
+      user: req.user.id,
+      brebis: brebisId,
+      montant: brebis.prix,
+      statut: 'en_attente',
+      dateInvestissement: Date.now(),
+      gains: 0,
+      actif: true
+    });
+
+    // Populer les données pour la réponse
+    await investment.populate('brebis');
+    await investment.populate('user', 'nom email');
+
+    res.status(201).json({
+      success: true,
+      message: 'Investissement créé avec succès',
+      data: investment
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Obtenir tous les investissements de l'utilisateur
 // @route   GET /api/investments
 // @access  Private

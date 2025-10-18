@@ -4,6 +4,192 @@ const Transaction = require('../models/Transaction');
 const Brebis = require('../models/Brebis');
 const User = require('../models/User');
 
+// @desc    Créer un Payment Intent pour un investissement
+// @route   POST /api/payments/create-payment-intent
+// @access  Private
+exports.createPaymentIntent = async (req, res, next) => {
+  try {
+    const { investmentId } = req.body;
+
+    if (!investmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID d\'investissement requis'
+      });
+    }
+
+    // Récupérer l'investissement
+    const investment = await Investment.findById(investmentId)
+      .populate('brebis')
+      .populate('user');
+
+    if (!investment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Investissement non trouvé'
+      });
+    }
+
+    // Vérifier que l'utilisateur est le propriétaire de l'investissement
+    if (investment.user._id.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé à cet investissement'
+      });
+    }
+
+    // Vérifier que l'investissement est en attente
+    if (investment.statut !== 'en_attente') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cet investissement ne peut plus être payé'
+      });
+    }
+
+    // Créer le Payment Intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(investment.montant * 100), // Convertir en centimes
+      currency: 'eur',
+      metadata: {
+        investmentId: investment._id.toString(),
+        userId: req.user.id,
+        brebisId: investment.brebis._id.toString(),
+        brebisNom: investment.brebis.nom
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Confirmer le paiement et finaliser l'investissement
+// @route   POST /api/payments/confirm
+// @access  Private
+exports.confirmPayment = async (req, res, next) => {
+  try {
+    const { paymentIntentId, investmentId } = req.body;
+    console.log('Confirm payment request:', { paymentIntentId, investmentId, userId: req.user.id });
+
+    if (!paymentIntentId || !investmentId) {
+      console.log('Missing required fields');
+      return res.status(400).json({
+        success: false,
+        message: 'ID de paiement et d\'investissement requis'
+      });
+    }
+
+    // Récupérer le Payment Intent depuis Stripe
+    console.log('Retrieving payment intent from Stripe...');
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    console.log('Payment intent status:', paymentIntent.status);
+
+    if (paymentIntent.status !== 'succeeded') {
+      console.log('Payment not succeeded:', paymentIntent.status);
+      return res.status(400).json({
+        success: false,
+        message: 'Le paiement n\'a pas été complété'
+      });
+    }
+
+    // Récupérer l'investissement
+    console.log('Finding investment...');
+    const investment = await Investment.findById(investmentId)
+      .populate('brebis')
+      .populate('user');
+
+    if (!investment) {
+      console.log('Investment not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Investissement non trouvé'
+      });
+    }
+
+    console.log('Investment found:', { 
+      id: investment._id, 
+      userId: investment.user._id.toString(), 
+      requestUserId: req.user.id,
+      status: investment.statut 
+    });
+
+    // Vérifier que l'utilisateur est le propriétaire
+    if (investment.user._id.toString() !== req.user.id) {
+      console.log('User mismatch');
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé'
+      });
+    }
+
+    console.log('Creating transaction...');
+    // Créer la transaction
+    const transaction = await Transaction.create({
+      user: req.user.id,
+      montant: investment.montant,
+      type: 'achat',
+      statut: 'complete',
+      stripePaymentIntentId: paymentIntentId,
+      description: `Paiement pour investissement dans ${investment.brebis.nom}`
+    });
+    console.log('Transaction created:', transaction._id);
+
+    console.log('Updating investment...');
+    // Mettre à jour l'investissement
+    investment.statut = 'confirme';
+    investment.transaction = transaction._id;
+    await investment.save();
+    console.log('Investment updated to confirmed');
+
+    console.log('Updating brebis...');
+    // Marquer la brebis comme vendue
+    await Brebis.findByIdAndUpdate(investment.brebis._id, {
+      disponible: false,
+      vendue: true,
+      achetePar: req.user.id,
+      dateAchat: new Date()
+    });
+    console.log('Brebis marked as sold');
+
+    console.log('Updating user stats...');
+    // Mettre à jour les statistiques de l'utilisateur
+    await User.findByIdAndUpdate(req.user.id, {
+      $inc: {
+        nombreBrebis: 1,
+        montantTotalInvesti: investment.montant
+      },
+      $push: {
+        investissements: investment._id
+      }
+    });
+    console.log('User stats updated');
+
+    console.log('Payment confirmation successful');
+    res.status(200).json({
+      success: true,
+      message: 'Paiement confirmé et investissement finalisé',
+      data: {
+        success: true,
+        paymentIntentId,
+        investmentId,
+        message: 'Investissement confirmé avec succès'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in confirmPayment:', error);
+    next(error);
+  }
+};
+
 // @desc    Créer une session de paiement Stripe
 // @route   POST /api/payment/create-checkout-session
 // @access  Private

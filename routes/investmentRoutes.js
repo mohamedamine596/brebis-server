@@ -1,5 +1,6 @@
 const express = require('express');
 const {
+  createInvestment,
   getMyInvestments,
   getInvestmentById,
   getInvestmentStats,
@@ -12,6 +13,7 @@ const router = express.Router();
 // Toutes les routes sont protégées
 router.use(protect);
 
+router.post('/', createInvestment);
 router.get('/', getMyInvestments);
 router.get('/stats', getInvestmentStats);
 router.get('/activities', getRecentActivities);
