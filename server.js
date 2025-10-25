@@ -43,8 +43,19 @@ app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Security headers
-app.use(helmet());
+// Security headers with relaxed CSP for images
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https:"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "http://brebis-server-1.vercel.app", "http://localhost:5000"],
+      connectSrc: ["'self'", "http://brebis-server-1.vercel.app", "http://localhost:5000"],
+    },
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 
 // CORS
 const corsOptions = {
@@ -61,6 +72,22 @@ app.use(compression());
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
+
+// Serve static files (uploaded images) with explicit CORS headers
+app.use('/uploads', (req, res, next) => {
+  // Set explicit CORS headers for image requests
+  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://brebis-server-1.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+}, express.static('uploads'));
 
 // Routes
 app.use('/api/auth', authLimiter, require('./routes/authRoutes'));

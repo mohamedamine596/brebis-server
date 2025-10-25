@@ -61,7 +61,29 @@ exports.getBrebisById = async (req, res, next) => {
 // @access  Private/Admin
 exports.createBrebis = async (req, res, next) => {
   try {
-    const brebis = await Brebis.create(req.body);
+    // Extract form data
+    const brebisData = {
+      nom: req.body.nom,
+      description: req.body.description,
+      prix: parseFloat(req.body.prix),
+      age: req.body.age ? parseInt(req.body.age) : undefined,
+      race: req.body.race || undefined,
+    };
+
+    // Handle image upload
+    if (req.file) {
+      brebisData.image = req.file.filename; // Store only filename, not full path
+    }
+
+    // Validate required fields
+    if (!brebisData.nom || !brebisData.description || !brebisData.prix) {
+      return res.status(400).json({
+        success: false,
+        message: 'Les champs nom, description et prix sont requis'
+      });
+    }
+
+    const brebis = await Brebis.create(brebisData);
 
     res.status(201).json({
       success: true,
@@ -78,21 +100,49 @@ exports.createBrebis = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateBrebis = async (req, res, next) => {
   try {
-    const brebis = await Brebis.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      {
-        new: true,
-        runValidators: true
-      }
-    );
-
-    if (!brebis) {
+    // Find existing brebis
+    const existingBrebis = await Brebis.findById(req.params.id);
+    
+    if (!existingBrebis) {
       return res.status(404).json({
         success: false,
         message: 'Brebis non trouvée'
       });
     }
+
+    // Extract form data
+    const updateData = {};
+    
+    if (req.body.nom) updateData.nom = req.body.nom;
+    if (req.body.description) updateData.description = req.body.description;
+    if (req.body.prix) updateData.prix = parseFloat(req.body.prix);
+    if (req.body.age) updateData.age = parseInt(req.body.age);
+    if (req.body.race) updateData.race = req.body.race;
+    if (req.body.disponible !== undefined) updateData.disponible = req.body.disponible === 'true';
+
+    // Handle image upload
+    if (req.file) {
+      updateData.image = req.file.filename;
+      
+      // TODO: Delete old image file if it exists
+      // const fs = require('fs');
+      // const path = require('path');
+      // if (existingBrebis.image && existingBrebis.image !== 'default-brebis.jpg') {
+      //   const oldImagePath = path.join(__dirname, '../uploads', existingBrebis.image);
+      //   if (fs.existsSync(oldImagePath)) {
+      //     fs.unlinkSync(oldImagePath);
+      //   }
+      // }
+    }
+
+    const brebis = await Brebis.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      {
+        new: true,
+        runValidators: true
+      }
+    );
 
     res.status(200).json({
       success: true,
