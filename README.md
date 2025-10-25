@@ -121,7 +121,7 @@ STRIPE_SECRET_KEY=sk_test_votre_cle_stripe
 STRIPE_WEBHOOK_SECRET=whsec_votre_webhook_secret
 
 # URL du frontend
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://brebis-server-1.vercel.app
 
 # Admin par défaut
 ADMIN_EMAIL=admin@brebisinvest.fr
@@ -390,7 +390,7 @@ Après avoir exécuté le script `seedData.js`:
 | JWT_SECRET | Secret pour JWT | changez_moi_en_production |
 | STRIPE_SECRET_KEY | Clé secrète Stripe | sk_test_... |
 | STRIPE_WEBHOOK_SECRET | Secret webhook Stripe | whsec_... |
-| FRONTEND_URL | URL du frontend | http://localhost:3000 |
+| FRONTEND_URL | URL du frontend | http://brebis-server-1.vercel.app |
 
 ## 🚀 Déploiement
 
